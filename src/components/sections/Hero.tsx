@@ -1,6 +1,6 @@
 "use client"
 import React from 'react'
-import { motion } from 'framer-motion'
+import { motion, Variants } from 'framer-motion'
 import { Scissors, Clock, Star, ArrowRight } from 'lucide-react'
 
 // ============================================
@@ -16,39 +16,39 @@ type StatItemProps = {
 // ============================================
 // ANIMATION VARIANTS
 // ============================================
-const fadeInUp = {
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  visible: (delay: number = 0) => ({
+  visible: (custom: number) => ({
     opacity: 1,
     y: 0,
     transition: {
       duration: 0.6,
-      delay,
+      delay: custom,
       ease: [0.22, 1, 0.36, 1]
     }
   })
 }
 
-const fadeIn = {
+const fadeIn: Variants = {
   hidden: { opacity: 0 },
-  visible: (delay: number = 0) => ({
+  visible: (custom: number) => ({
     opacity: 1,
     transition: {
       duration: 0.8,
-      delay,
+      delay: custom,
       ease: 'easeOut'
     }
   })
 }
 
-const scaleIn = {
+const scaleIn: Variants = {
   hidden: { scale: 0.8, opacity: 0 },
-  visible: (delay: number = 0) => ({
+  visible: (custom: number) => ({
     scale: 1,
     opacity: 1,
     transition: {
       duration: 0.5,
-      delay,
+      delay: custom,
       ease: [0.22, 1, 0.36, 1]
     }
   })
