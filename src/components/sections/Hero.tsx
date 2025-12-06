@@ -75,7 +75,12 @@ const StatItem = ({ icon: Icon, value, label, delay }: StatItemProps) => (
   </motion.div>
 )
 
-const CTAButton = ({ children, variant = 'primary' }: { children: React.ReactNode; variant?: 'primary' | 'secondary' }) => {
+
+const CTAButton = ({ children, variant = 'primary', onClick }: { 
+  children: React.ReactNode; 
+  variant?: 'primary' | 'secondary' 
+  onClick?: () => void;
+}) => {
   const baseClasses = "group relative px-8 py-4 rounded-full font-semibold text-base transition-all duration-300 flex items-center gap-2 overflow-hidden"
   
   const variantClasses = variant === 'primary'
@@ -87,17 +92,24 @@ const CTAButton = ({ children, variant = 'primary' }: { children: React.ReactNod
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       className={`${baseClasses} ${variantClasses}`}
+      onClick={onClick}
     >
       {children}
       <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
     </motion.button>
   )
 }
-
 // ============================================
 // MAIN HERO COMPONENT
 // ============================================
 export default function Hero() {
+
+
+const scrollToSection = (href: string) => {
+  const element = document.getElementById(href.replace('#', ''))
+  element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+} 
+
   return (
     <section className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-neutral-900">
       
@@ -182,10 +194,10 @@ export default function Hero() {
               variants={fadeInUp}
               className="flex flex-col sm:flex-row gap-4"
             >
-              <CTAButton variant="primary">
+              <CTAButton variant="primary" onClick={() => scrollToSection('#booking')}>
                 Book Appointment
               </CTAButton>
-              <CTAButton variant="secondary">
+              <CTAButton variant="secondary" onClick={() => scrollToSection('#services')}>
                 View Services
               </CTAButton>
             </motion.div>
