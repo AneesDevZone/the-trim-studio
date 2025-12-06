@@ -9,14 +9,31 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@react-email/components": "^1.0.1",
+    "@supabase/supabase-js": "^2.86.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "envalid": "^8.1.1",
+    "framer-motion": "^12.23.25",
+    "lucide-react": "^0.555.0",
     "next": "16.0.7",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-datepicker": "^8.10.0",
+    "react-dom": "19.2.0",
+    "react-email": "^5.0.5",
+    "react-hook-form": "^7.68.0",
+    "resend": "^6.5.2",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.1.13",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
+    "@types/react-datepicker": "^6.2.0",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
