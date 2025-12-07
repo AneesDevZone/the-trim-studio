@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { bookingSchema, type BookingFormData } from '@/lib/validations/booking'
 import { generateTimeSlots } from '@/lib/utils'
+import emailjs from '@emailjs/browser';
 
 import 'react-datepicker/dist/react-datepicker.css'
 
@@ -111,6 +112,7 @@ export function Booking() {
     formState: { errors },
     setValue,
     watch,
+    reset,
   } = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
@@ -123,79 +125,72 @@ export function Booking() {
   const selectedBarber = watch('barber')
   const timeSlots = generateTimeSlots()
 
-  // ORIGINAL SUBMIT HANDLER (UNCHANGED)
-  const onSubmit = async (data: BookingFormData) => {
-    setIsSubmitting(true)
+ // UPDATED SUBMIT HANDLER
+ const onSubmit = async (data: BookingFormData) => {
+  setIsSubmitting(true)
+  
+  try {
+    // 1. Existing Time Logic
+    const [time, modifier] = data.time.split(' ')
+    let [hours, minutes] = time.split(':').map(Number)
     
-    try {
-      const [time, modifier] = data.time.split(' ')
-      let [hours, minutes] = time.split(':').map(Number)
-      
-      if (modifier === 'PM' && hours < 12) hours += 12
-      if (modifier === 'AM' && hours === 12) hours = 0
-      
-      const dateTime = new Date(data.date)
-      dateTime.setHours(hours, minutes)
-      
-      const serviceDurationMap: Record<string, number> = {
-        haircut: 45,
-        beard: 30,
-        deluxe: 90,
-        kids: 40,
-        shave: 50,
-        executive: 120,
-      }
-      
-      const duration = serviceDurationMap[data.service] || 45
-      
-      console.log('Sending booking request:', {
-        ...data,
-        dateTime: dateTime.toISOString(),
-        duration,
-      })
-      
-      const response = await fetch('/api/booking', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...data,
-          dateTime: dateTime.toISOString(),
-          duration,
-        }),
-      })
-      
-      console.log('Response status:', response.status)
-      
-      const contentType = response.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text()
-        console.error('Non-JSON response:', text)
-        throw new Error(`Server error: ${response.status} ${response.statusText}`)
-      }
-      
-      const result = await response.json()
-      console.log('Response data:', result)
-      
-      if (!response.ok) {
-        throw new Error(result.error || `Booking failed: ${response.status}`)
-      }
-      
-      toast.success('Appointment Booked!', {
-        description: `Your appointment for ${data.service} has been scheduled. Confirmation email sent.`,
-        duration: 5000,
-      })
-      
-    } catch (error: any) {
-      console.error('Booking error:', error)
-      toast.error('Booking Failed', {
-        description: error.message || 'Please try again or contact us directly.',
-      })
-    } finally {
-      setIsSubmitting(false)
+    if (modifier === 'PM' && hours < 12) hours += 12
+    if (modifier === 'AM' && hours === 12) hours = 0
+    
+    const dateTime = new Date(data.date)
+    dateTime.setHours(hours, minutes)
+    
+    const serviceDurationMap: Record<string, number> = {
+      haircut: 45, beard: 30, deluxe: 90, kids: 40, shave: 50, executive: 120,
     }
+    const duration = serviceDurationMap[data.service] || 45
+    
+    // 2. Database Submission
+    const response = await fetch('/api/booking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...data, dateTime: dateTime.toISOString(), duration }),
+    })
+    
+    const result = await response.json()
+    
+    if (!response.ok) throw new Error(result.error || `Booking failed`)
+
+    // 3. EmailJS Confirmation (NEW IMPLEMENTATION)
+    try {
+      await emailjs.send(
+        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+        {
+          user_name: data.name,
+          user_email: data.email,
+          user_phone: data.phone,
+          service: services.find(s => s.id === data.service)?.name || data.service,
+          date_time: dateTime.toLocaleString(),
+          notes: data.notes || "None",
+        },
+        process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!
+      );
+    } catch (emailError) {
+      console.warn('Email notification failed:', emailError)
+      // We do not throw here so the user still sees the success toast
+    }
+    
+    toast.success('Appointment Booked!', {
+      description: `Scheduled for ${data.service}. Check your inbox!`,
+      duration: 5000,
+    })
+    reset();
+    
+  } catch (error: any) {
+    console.error('Booking error:', error)
+    toast.error('Booking Failed', {
+      description: error.message || 'Please try again.',
+    })
+  } finally {
+    setIsSubmitting(false)
   }
+}
 
   return (
     <section id="booking" className="relative py-20 lg:py-20 bg-neutral-900 overflow-hidden">
@@ -228,7 +223,7 @@ export function Booking() {
           </h2>
 
           <p className="text-lg text-gray-400 leading-relaxed">
-            Schedule your grooming session with our master barbers. We'll confirm your appointment within 24 hours.
+            Schedule your grooming session with our master barbers.
           </p>
 
           {/* Social Links */}
@@ -264,7 +259,7 @@ export function Booking() {
               <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent rounded-3xl opacity-50" />
               
               <div className="relative space-y-8">
-                
+              <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-8">
                 {/* Personal Information */}
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-5">
@@ -447,7 +442,6 @@ export function Booking() {
                 <Button
                   type="submit"
                   loading={isSubmitting}
-                  onClick={handleSubmit(onSubmit)}
                   className="w-full py-4 text-lg bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-amber-500/50 hover:-translate-y-0.5"
                 >
                   {isSubmitting ? 'Booking...' : 'Confirm Appointment'}
@@ -456,6 +450,7 @@ export function Booking() {
                 <p className="text-sm text-gray-500 text-center leading-relaxed">
                   You'll receive a confirmation email within 24 hours. Cancel or reschedule up to 12 hours before your appointment.
                 </p>
+                </form>
               </div>
             </div>
           </motion.div>

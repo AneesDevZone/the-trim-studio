@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { supabase } from '@/lib/supabase'
-import { env } from '@/lib/validations/env'
 
-const resend = new Resend(env.RESEND_API_KEY)
-
-// Handle CORS preflight requests
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 200,
@@ -19,7 +14,6 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Add CORS headers
     const headers = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -27,17 +21,7 @@ export async function POST(request: NextRequest) {
       'Content-Type': 'application/json',
     }
 
-    // Check environment variables
-    if (!env.RESEND_API_KEY || !env.RESEND_API_KEY.startsWith('re_')) {
-      console.error('Invalid Resend API key')
-      return NextResponse.json(
-        { error: 'Server configuration error - Email service not configured' },
-        { status: 500, headers }
-      )
-    }
-
     const body = await request.json()
-    console.log('Received booking:', body)
 
     // Validate required fields
     const requiredFields = ['name', 'email', 'phone', 'service', 'dateTime']
@@ -50,7 +34,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Save to Supabase
+    // Save to Supabase
     const { data, error } = await supabase
       .from('appointments')
       .insert([{
@@ -67,36 +51,7 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (error) {
-      console.error('Supabase error:', error)
-      throw error
-    }
-
-    console.log('Saved to Supabase:', data)
-
-    // 2. Try to send confirmation email (but don't fail if email fails)
-    try {
-      await resend.emails.send({
-        from: `The Trim Studio <${env.NEXT_PUBLIC_FROM_EMAIL}>`,
-        to: [body.email],
-        subject: 'Appointment Confirmation - The Trim Studio',
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2>Appointment Confirmed!</h2>
-            <p>Dear ${body.name},</p>
-            <p>Your appointment has been scheduled for ${new Date(body.dateTime).toLocaleString()}.</p>
-            <p><strong>Service:</strong> ${body.service}</p>
-            <p>We look forward to seeing you!</p>
-            <br/>
-            <p><em>The Trim Studio Team</em></p>
-          </div>
-        `,
-      })
-      console.log('Email sent successfully')
-    } catch (emailError) {
-      console.warn('Email sending failed (continuing anyway):', emailError)
-      // Don't throw - appointment was saved successfully
-    }
+    if (error) throw error
 
     return NextResponse.json({
       success: true,
@@ -105,20 +60,9 @@ export async function POST(request: NextRequest) {
     }, { status: 200, headers })
 
   } catch (error: any) {
-    console.error('Booking error:', error)
-    
     return NextResponse.json(
-      { 
-        error: error.message || 'Failed to book appointment',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      },
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        }
-      }
+      { error: error.message || 'Failed to book appointment' },
+      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } }
     )
   }
 }
