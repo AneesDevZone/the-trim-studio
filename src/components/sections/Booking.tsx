@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { bookingSchema, type BookingFormData } from '@/lib/validations/booking'
 import { generateTimeSlots } from '@/lib/utils'
-import emailjs from '@emailjs/browser';
 
 import 'react-datepicker/dist/react-datepicker.css'
 
@@ -112,7 +111,6 @@ export function Booking() {
     formState: { errors },
     setValue,
     watch,
-    reset,
   } = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
@@ -125,75 +123,82 @@ export function Booking() {
   const selectedBarber = watch('barber')
   const timeSlots = generateTimeSlots()
 
- // UPDATED SUBMIT HANDLER
- const onSubmit = async (data: BookingFormData) => {
-  setIsSubmitting(true)
-  
-  try {
-    // 1. Existing Time Logic
-    const [time, modifier] = data.time.split(' ')
-    let [hours, minutes] = time.split(':').map(Number)
+  // ORIGINAL SUBMIT HANDLER (UNCHANGED)
+  const onSubmit = async (data: BookingFormData) => {
+    setIsSubmitting(true)
     
-    if (modifier === 'PM' && hours < 12) hours += 12
-    if (modifier === 'AM' && hours === 12) hours = 0
-    
-    const dateTime = new Date(data.date)
-    dateTime.setHours(hours, minutes)
-    
-    const serviceDurationMap: Record<string, number> = {
-      haircut: 45, beard: 30, deluxe: 90, kids: 40, shave: 50, executive: 120,
-    }
-    const duration = serviceDurationMap[data.service] || 45
-    
-    // 2. Database Submission
-    const response = await fetch('/api/booking', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, dateTime: dateTime.toISOString(), duration }),
-    })
-    
-    const result = await response.json()
-    
-    if (!response.ok) throw new Error(result.error || `Booking failed`)
-
-    // 3. EmailJS Confirmation (NEW IMPLEMENTATION)
     try {
-      await emailjs.send(
-        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
-        {
-          user_name: data.name,
-          user_email: data.email,
-          user_phone: data.phone,
-          service: services.find(s => s.id === data.service)?.name || data.service,
-          date_time: dateTime.toLocaleString(),
-          notes: data.notes || "None",
+      const [time, modifier] = data.time.split(' ')
+      let [hours, minutes] = time.split(':').map(Number)
+      
+      if (modifier === 'PM' && hours < 12) hours += 12
+      if (modifier === 'AM' && hours === 12) hours = 0
+      
+      const dateTime = new Date(data.date)
+      dateTime.setHours(hours, minutes)
+      
+      const serviceDurationMap: Record<string, number> = {
+        haircut: 45,
+        beard: 30,
+        deluxe: 90,
+        kids: 40,
+        shave: 50,
+        executive: 120,
+      }
+      
+      const duration = serviceDurationMap[data.service] || 45
+      
+      console.log('Sending booking request:', {
+        ...data,
+        dateTime: dateTime.toISOString(),
+        duration,
+      })
+      
+      const response = await fetch('/api/booking', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!
-      );
-    } catch (emailError) {
-      console.warn('Email notification failed:', emailError)
-      // We do not throw here so the user still sees the success toast
+        body: JSON.stringify({
+          ...data,
+          dateTime: dateTime.toISOString(),
+          duration,
+        }),
+      })
+      
+      console.log('Response status:', response.status)
+      
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Non-JSON response:', text)
+        throw new Error(`Server error: ${response.status} ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      console.log('Response data:', result)
+      
+      if (!response.ok) {
+        throw new Error(result.error || `Booking failed: ${response.status}`)
+      }
+      
+      toast.success('Appointment Booked!', {
+        description: `Your appointment for ${data.service} has been scheduled. Confirmation email sent.`,
+        duration: 5000,
+      })
+      
+    } catch (error: any) {
+      console.error('Booking error:', error)
+      toast.error('Booking Failed', {
+        description: error.message || 'Please try again or contact us directly.',
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-    
-    toast.success('Appointment Booked!', {
-      description: `Scheduled for ${data.service}. Check your inbox!`,
-      duration: 5000,
-    })
-    reset();
-    
-  } catch (error: any) {
-    console.error('Booking error:', error)
-    toast.error('Booking Failed', {
-      description: error.message || 'Please try again.',
-    })
-  } finally {
-    setIsSubmitting(false)
   }
-}
 
   return (
-    <section id="booking" className="relative py-20 lg:py-20 bg-neutral-900 overflow-hidden">
+    <section id="booking" className="relative py-20 lg:py-32 bg-neutral-900 overflow-hidden">
       
       {/* Background Decorative Elements */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-[120px]" />
@@ -223,7 +228,7 @@ export function Booking() {
           </h2>
 
           <p className="text-lg text-gray-400 leading-relaxed">
-            Schedule your grooming session with our master barbers.
+            Schedule your grooming session with our master barbers. We'll confirm your appointment within 24 hours.
           </p>
 
           {/* Social Links */}
@@ -259,7 +264,7 @@ export function Booking() {
               <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent rounded-3xl opacity-50" />
               
               <div className="relative space-y-8">
-              <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-8">
+                
                 {/* Personal Information */}
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-5">
@@ -442,15 +447,13 @@ export function Booking() {
                 <Button
                   type="submit"
                   loading={isSubmitting}
+                  onClick={handleSubmit(onSubmit)}
                   className="w-full py-4 text-lg bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-amber-500/50 hover:-translate-y-0.5"
                 >
                   {isSubmitting ? 'Booking...' : 'Confirm Appointment'}
                 </Button>
                 
-                <p className="text-sm text-gray-500 text-center leading-relaxed">
-                  You'll receive a confirmation email within 24 hours. Cancel or reschedule up to 12 hours before your appointment.
-                </p>
-                </form>
+                
               </div>
             </div>
           </motion.div>
@@ -458,82 +461,100 @@ export function Booking() {
           {/* RIGHT: Info Cards */}
           <motion.div variants={slideInRight} className="space-y-6">
             
-            {/* Why Choose Us */}
-            <div className="p-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl">
-              <h3 className="text-2xl font-bold text-white mb-6">Why Choose Us</h3>
-              <div className="space-y-5">
-                {[
-                  {
-                    title: 'Master Barbers',
-                    description: 'Our barbers have 10+ years of experience and ongoing training.',
-                  },
-                  {
-                    title: 'Premium Products',
-                    description: 'We use only the highest quality grooming products and tools.',
-                  },
-                  {
-                    title: 'Sanitary Standards',
-                    description: 'All tools are sterilized between clients for your safety.',
-                  },
-                  {
-                    title: 'Satisfaction Guarantee',
-                    description: 'Not happy with your cut? We\'ll fix it within 48 hours.',
-                  },
-                ].map((item, index) => (
-                  <div key={index} className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">
-                      <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-white mb-1">{item.title}</h4>
-                      <p className="text-gray-400 text-sm leading-relaxed">{item.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
             {/* Working Hours */}
-            <div className="p-8 bg-gradient-to-br from-amber-500/10 to-transparent backdrop-blur-sm border border-amber-500/20 rounded-3xl">
-              <h3 className="text-2xl font-bold text-white mb-6">Working Hours</h3>
-              <div className="space-y-4">
+            <div className="p-6 bg-gradient-to-br from-amber-500/10 to-transparent backdrop-blur-sm border border-amber-500/20 rounded-3xl">
+              <h3 className="text-xl font-bold text-white mb-4">Working Hours</h3>
+              <div className="space-y-3">
                 {[
                   { day: 'Monday - Friday', hours: '9:00 AM - 7:00 PM' },
                   { day: 'Saturday', hours: '9:00 AM - 6:00 PM' },
                   { day: 'Sunday', hours: '10:00 AM - 4:00 PM' },
                 ].map((schedule, index) => (
-                  <div key={index} className="flex justify-between items-center py-3 border-b border-white/10 last:border-0">
-                    <span className="text-gray-300">{schedule.day}</span>
-                    <span className="font-semibold text-white">{schedule.hours}</span>
+                  <div key={index} className="flex justify-between items-center py-2 border-b border-white/10 last:border-0">
+                    <span className="text-gray-300 text-sm">{schedule.day}</span>
+                    <span className="font-semibold text-white text-sm">{schedule.hours}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-6 p-4 bg-amber-500/20 backdrop-blur-sm rounded-xl border border-amber-500/30">
-                <p className="text-sm text-gray-300 leading-relaxed">
-                  <span className="font-semibold text-amber-300">Note:</span> Last appointment is 30 minutes before closing. Evening appointments may require advance booking.
+              <div className="mt-4 p-3 bg-amber-500/20 backdrop-blur-sm rounded-xl border border-amber-500/30">
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  <span className="font-semibold text-amber-300">Note:</span> Last appointment 30min before closing.
                 </p>
               </div>
             </div>
             
             {/* Need Help */}
-            <div className="p-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl">
-              <h3 className="text-2xl font-bold text-white mb-6">Need Help?</h3>
-              <div className="space-y-4">
-                <p className="text-gray-400 leading-relaxed">
-                  Call us directly for immediate assistance or same-day appointments.
-                </p>
-                <div className="text-center py-4">
-                  <a
-                    href="tel:+1234567890"
-                    className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 font-semibold text-xl transition-colors duration-300"
-                  >
-                    <Phone className="w-5 h-5" />
-                    (123) 456-7890
-                  </a>
+            <div className="p-6 bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl">
+              <h3 className="text-xl font-bold text-white mb-3">Need Help?</h3>
+              <p className="text-gray-400 text-sm mb-4">
+                Call for immediate assistance or same-day appointments.
+              </p>
+              <a
+                href="tel:+1234567890"
+                className="flex items-center justify-center gap-2 text-amber-400 hover:text-amber-300 font-semibold text-lg transition-colors duration-300"
+              >
+                <Phone className="w-5 h-5" />
+                (123) 456-7890
+              </a>
+            </div>
+
+            {/* Location Card */}
+            <div className="group relative p-6 bg-gradient-to-br from-amber-500/10 via-white/5 to-transparent backdrop-blur-sm border border-amber-500/20 rounded-3xl overflow-hidden hover:border-amber-500/40 transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              
+              <div className="relative space-y-4">
+                {/* Interactive Map Container */}
+                <div className="relative rounded-2xl overflow-hidden border border-white/10 group-hover:border-amber-500/30 transition-all duration-300">
+                  <div className="aspect-[16/11] bg-neutral-800 relative">
+                    <iframe
+                      src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2443.5847389583447!2d6.893835776771847!3d52.21877067197625!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47b813c0c8b0c5e5%3A0x3c4b0b5d5e5f0b5d!2sEnschede%2C%20Netherlands!5e0!3m2!1sen!2s!4v1234567890123!5m2!1sen!2s"
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      allowFullScreen
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      className="grayscale hover:grayscale-0 transition-all duration-500"
+                    />
+                    {/* Find Us Overlay */}
+                    <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-2 bg-neutral-900/90 backdrop-blur-md rounded-xl border border-amber-500/30">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="text-white font-semibold text-sm">Find Us</span>
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-900/40 to-transparent pointer-events-none" />
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500 text-center">
-                  We typically respond within 15 minutes during business hours.
-                </p>
+
+                {/* Address with Get Directions */}
+                <a
+                  href="https://maps.google.com/?q=Enschede,Netherlands"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-3 p-4 bg-white/5 hover:bg-amber-500/10 rounded-xl border border-white/10 hover:border-amber-500/30 transition-all duration-300 group/addr"
+                >
+                  <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-white font-semibold text-sm">Our Location</h4>
+                      <svg className="w-4 h-4 text-amber-400 transition-transform duration-300 group-hover/addr:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-400 text-xs leading-relaxed">
+                      123 Style Street, Enschede<br />
+                      Overijssel, 7511 AB, Netherlands
+                    </p>
+                    <span className="inline-block mt-2 text-xs text-amber-400 font-medium">Get Directions →</span>
+                  </div>
+                </a>
               </div>
             </div>
           </motion.div>
